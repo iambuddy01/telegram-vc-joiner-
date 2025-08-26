@@ -700,7 +700,7 @@ class EnhancedVoiceChatManager:
             return None
 
     async def leave_voice_chat(self, chat_id: Union[int, str]) -> bool:
-        """Leave voice chat using official pytgcalls API"""
+        """Leave voice chat using PyTgCalls.leave_call (official method)"""
         try:
             async with self._lock:
                 chat_id_str = str(chat_id)
@@ -711,8 +711,10 @@ class EnhancedVoiceChatManager:
                 pytgcalls = call_info.get("pytgcalls")
                 if pytgcalls:
                     try:
-                        await pytgcalls.leave_group_call(chat_id)  # <-- FIXED: use leave_group_call() for v2.2.5
-                        logger.info(f"✅ Left voice chat {chat_id} using PyTgCalls")
+                        # Official recommended method per docs
+                        await pytgcalls.leave_call(int(chat_id))
+                        logger.info(f"✅ Left voice chat {chat_id} using PyTgCalls.leave_call")
+                        await asyncio.sleep(1)
                     except Exception as e:
                         logger.error(f"❌ Error leaving voice chat: {e}")
                 await self._cleanup_call(chat_id_str)
@@ -919,7 +921,7 @@ class EnhancedVoiceChatManager:
                 
                 logger.info(f"🎵 Auto-playing next queued item: {next_item['file']}")
                 
-                await asyncio.sleep(1)  # Small delay
+                await asyncio.sleep(1) # Small delay
                 
                 success = await self.play_media(
                     chat_id,

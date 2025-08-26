@@ -116,3 +116,5 @@ __pycache__/
 # Media files (optional - remove if you want to track media)
 # media/
 # backups/
+# Ensure users.json is ignored
+users.json
