@@ -1,61 +1,37 @@
-# Updated Requirements for Voice Chat Bot
-# Telethon 1.40.0 + py-tgcalls 2.2.5
+# Modern Voice Chat Bot - Auto-Installing Dependencies
+# Python 3.9+ required - All dependencies auto-install on first run
 
-# Core Telegram Libraries
+# ===== CORE DEPENDENCIES =====
 telethon==1.40.0
 py-tgcalls==2.2.5
-
-# Bot Framework
-aiogram==3.13.1
-
-# Async File Operations
+aiogram==3.15.0
 aiofiles==24.1.0
-
-# Environment Variables
 python-dotenv==1.0.1
+pydub==0.25.1
 
-# Optional but Recommended Dependencies
-
-# Cryptographic acceleration for Telethon (highly recommended)
+# ===== PERFORMANCE DEPENDENCIES =====
+orjson==3.10.12
 cryptg==0.4.0
-
-# Audio/Video processing acceleration
+psutil==6.1.0
+Pillow==10.4.0
+aiohttp[speedups]==3.10.10
 ffmpeg-python==0.2.0
 
-# HTTP client improvements
-aiohttp[speedups]==3.10.10
-
-# JSON acceleration
-orjson==3.10.12
-
-# Performance monitoring (optional)
-psutil==6.1.0
-
-# Additional codec support (optional)
-Pillow==11.0.0
-
-# Database support (if you want to add persistence)
+# ===== OPTIONAL ADVANCED DEPENDENCIES =====
 # aiosqlite==0.20.0
-
-# Redis support (if you want to add caching)
 # redis==5.2.0
-
-# Development and Testing (optional)
 # pytest==8.3.4
 # pytest-asyncio==0.24.0
 
-# System Requirements:
-# - Python 3.9 or higher
-# - FFmpeg installed on system
-# - Node.js (for some py-tgcalls features)
+# ===== SYSTEM REQUIREMENTS =====
+# FFmpeg must be installed on your system and available in PATH.
 
-# Installation Notes:
-# 1. Install FFmpeg: https://ffmpeg.org/download.html
-# 2. For Ubuntu/Debian: sudo apt install ffmpeg
-# 3. For macOS: brew install ffmpeg
-# 4. For Windows: Download from https://ffmpeg.org/
+# ===== INSTALLATION =====
+# pip install -r requirements.txt
 
-# Platform-specific notes:
-# - Linux: All features work perfectly
-# - Windows: May need Visual C++ Build Tools
-# - macOS: Works well on both Intel and Apple Silicon
+# ===== TROUBLESHOOTING =====
+# If installation fails, upgrade pip and install build tools as needed.
+
+# (Do not include any Python code or print statements in requirements.txt)
+
+pydub

@@ -9,6 +9,44 @@ A Python bot that automatically joins Telegram voice chats and plays audio conte
 
 > 🚀 **Looking for contributors!** Whether you're a beginner or experienced developer, there are many ways to contribute to this project.
 
+## 🎯 Special Invitation to Telegram Experts
+
+**Calling all Telegram Bot & API specialists!** We're actively seeking experienced contributors who have expertise in:
+
+### 🔥 Priority Areas for Expert Contributors
+
+- **Telethon Library Experts** - Help optimize our Telegram client implementation
+- **Voice Chat Specialists** - Improve audio handling and voice chat functionality
+- **TgCalls Developers** - Enhance voice call integration and performance
+- **Telegram Bot API Veterans** - Share best practices and advanced patterns
+- **Audio Processing Engineers** - Optimize audio streaming and processing
+- **Network Protocol Experts** - Improve connection stability and error handling
+- **Security Specialists** - Enhance authentication and data protection
+
+### 🌟 What We Offer Expert Contributors
+
+- **Technical Leadership Opportunities** - Lead feature development and architecture decisions
+- **Direct Collaboration** - Work closely with maintainers on roadmap planning
+- **Recognition & Credits** - Featured prominently in project documentation and releases
+- **Learning Exchange** - Share knowledge with the community and learn from others
+- **Open Source Impact** - Help build tools used by the Telegram developer community
+
+### 📞 How to Get Involved as an Expert
+
+1. **Review our codebase** and identify areas where your expertise can make an impact
+2. **Open a discussion** about your ideas for improvements or new features
+3. **Submit a detailed proposal** for significant changes or architectural improvements
+4. **Mentor other contributors** and help review pull requests in your area of expertise
+
+**Have experience with similar projects?** We'd love to hear about your background with:
+- Telegram userbot development
+- Voice chat automation
+- Real-time audio streaming
+- Telegram MTProto protocol
+- Large-scale bot deployments
+
+*If you're an expert in any of these areas, please reach out! We're excited to collaborate with experienced developers who can help take this project to the next level.*
+
 ## Features
 
 - Automatically joins Telegram voice chats
