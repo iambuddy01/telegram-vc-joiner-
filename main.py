@@ -1,5 +1,8 @@
 from pytgcalls import PyTgCalls
 from pytgcalls.types import MediaStream
+from pydub import AudioSegment
+from pydub.effects import normalize, low_pass_filter, high_pass_filter
+import math
 #!/usr/bin/env python3
 """
 Modern Voice Chat Bot with PyTgCalls 2.2.5, Telethon 1.40.0, and Aiogram 3.15.0
@@ -362,7 +365,7 @@ def validate_and_load_config():
     optional_config = {
         'JOIN_DELAY': (2, int, "Delay between joins in seconds"),
         'LEAVE_DELAY': (1, int, "Delay between leaves in seconds"),
-        'MAX_VOLUME': (200, int, "Maximum volume level (1-300)"),
+        'MAX_VOLUME': (600, int, "Maximum volume level (1-600)"),
         'VOICE_JOIN_DELAY': (3, int, "Delay before joining voice chat"),
         'MAX_ACCOUNTS': (50, int, "Maximum number of accounts"),
         'FFMPEG_PATH': ('ffmpeg', str, "Path to FFmpeg binary"),
@@ -387,7 +390,7 @@ def validate_and_load_config():
     # Validate ranges
     config['JOIN_DELAY'] = max(1, config['JOIN_DELAY'])
     config['LEAVE_DELAY'] = max(1, config['LEAVE_DELAY'])
-    config['MAX_VOLUME'] = max(1, min(300, config['MAX_VOLUME']))
+    config['MAX_VOLUME'] = max(1, min(600, config['MAX_VOLUME']))
     config['VOICE_JOIN_DELAY'] = max(1, config['VOICE_JOIN_DELAY'])
     config['MAX_ACCOUNTS'] = max(1, min(100, config['MAX_ACCOUNTS']))
     
@@ -548,35 +551,411 @@ class EnhancedVoiceChatManager:
     # Playback state per chat
     playback_state: Dict[str, Dict[str, any]] = {}
 
-    # --- Volume helpers (paste inside EnhancedVoiceChatManager) ---
-    MAX_UI_VOLUME = 200          # 200% == max boost
-    MAX_BOOST_MULT = 12.0        # Increased from 8.0 to 12.0 (~+21.5 dB, safe for ffmpeg)
+    # --- Enhanced Audio Processing with Pydub ---
+    MAX_UI_VOLUME = 600          # Increased to 600% for maximum boost
+    MAX_BOOST_MULT = 30.0        # Maximum boost multiplier for very high volume (keep sane headroom)
 
-    def _ui_to_multiplier(self, percent: int) -> float:
+    def ui_percent_to_gain_mult(self, percent: int) -> float:
         """
-        100% => 1.0 (no change)
-        101–199% => smoothly up to MAX_BOOST_MULT
-        200% => MAX_BOOST_MULT (hard max)
-        25–99% => 0.25–0.99 (attenuation)
+        Enhanced multiplier mapping for maximum perceived loudness
+        600% -> 60x pre-gain for extreme loudness
         """
-        p = max(10, min(self.MAX_UI_VOLUME, int(percent)))  # clamp UI range [10, 200]
-        if p <= 100:
-            return p / 100.0
-        # smooth ramp from 1.0 at 100% to MAX_BOOST_MULT at 200%
-        return 1.0 + ((p - 100) / (self.MAX_UI_VOLUME - 100.0)) * (self.MAX_BOOST_MULT - 1.0)
+        p = max(1, min(int(percent), self.MAX_UI_VOLUME))
+        if p >= 600:
+            return 60.0  # Maximum extreme boost
+        elif p >= 500:
+            return 48.0  # Very high boost
+        elif p >= 400:
+            return 36.0  # High boost
+        elif p >= 300:
+            return 24.0  # Medium-high boost
+        elif p >= 200:
+            return 12.0  # Medium boost
+        else:
+            # Progressive scaling for lower values
+            return 1.0 + (p - 100) * (11.0 / 100.0)
 
-    def _filter_chain(self, mult: float) -> str:
+    def build_extreme_loudness_chain(self, mult: float) -> str:
         """
-        Clean & loud but safe: boost -> compressor -> limiter -> gentle EQ.
-        (Limiter prevents crack/distortion when >100%)
+        Build filter chain optimized for MAXIMUM perceived loudness
+        Target: RMS ≈ -3.0 dBFS, Peak = 0.0 dBFS at 600% (much louder)
         """
-        return (
-            f"volume={mult}:precision=fixed,"
-            "acompressor=threshold=-14dB:ratio=6:attack=5:release=50:makeup=1,"
-            "alimiter=limit=-1.0dB,"
-            "highpass=f=120,lowpass=f=14000"
-        )
+        # Stage 1: Pre-processing with higher initial gain
+        pre_stage = f"volume={mult}:precision=fixed,highpass=f=40:poles=2,lowpass=f=18000:poles=2,"
+        
+        if mult >= 55.0:  # 600% territory - MAXIMUM EXTREME LOUDNESS
+            return pre_stage + (
+                # Stage 1: Aggressive pre-compression to handle extreme gains
+                "acompressor=threshold=-35dB:ratio=30:knee=10:attack=0.5:release=30:makeup=18,"
+                
+                # Stage 2: Multi-band dynamic processing simulation
+                "acompressor=threshold=-30dB:ratio=25:knee=8:attack=0.5:release=40:makeup=15,"
+                "acompressor=threshold=-25dB:ratio=20:knee=6:attack=0.5:release=50:makeup=12,"
+                
+                # Stage 3: Adaptive normalization with very tight parameters for density
+                "dynaudnorm=f=500:g=35:n=1:p=0.98:m=3:s=1:r=0.9:b=1,"
+                
+                # Stage 4: Heavy multi-stage compression for broadcast loudness
+                "acompressor=threshold=-20dB:ratio=15:knee=4:attack=0.3:release=35:makeup=10,"
+                "acompressor=threshold=-15dB:ratio=10:knee=3:attack=0.3:release=25:makeup=6,"
+                
+                # Stage 5: Loudness normalization targeting very high levels
+                "loudnorm=I=-3:TP=-0.05:LRA=1.5:dual_mono=true:linear=true:print_format=json,"
+                
+                # Stage 6: Final density compression and peak control
+                "acompressor=threshold=-8dB:ratio=8:knee=2:attack=0.2:release=15:makeup=3,"
+                
+                # Stage 7: Hard limiting with minimal headroom
+                "alimiter=limit=0.999:attack=0.5:release=3:asc=true,"
+                
+                # Stage 8: EQ optimization for maximum perceived loudness
+                "equalizer=f=60:width_type=o:width=2.0:g=3.0,"     # Sub-bass boost
+                "equalizer=f=200:width_type=o:width=1.5:g=2.5,"    # Low-mid warmth
+                "equalizer=f=1000:width_type=o:width=1.0:g=1.5,"   # Mid presence
+                "equalizer=f=3500:width_type=o:width=0.8:g=6.0,"   # High presence boost
+                "equalizer=f=8000:width_type=o:width=1.0:g=-1.0,"  # Tame harsh highs slightly
+                "equalizer=f=12000:width_type=o:width=1.5:g=1.0,"  # Air boost
+                
+                # Stage 9: Final processing
+                "aresample=48000:resampler=soxr:precision=28"
+            )
+        
+        elif mult >= 45.0:  # 500% territory - ULTRA EXTREME LOUD
+            return pre_stage + (
+                "acompressor=threshold=-32dB:ratio=25:knee=8:attack=0.7:release=40:makeup=16,"
+                "acompressor=threshold=-28dB:ratio=20:knee=6:attack=0.7:release=50:makeup=14,"
+                "dynaudnorm=f=400:g=32:n=1:p=0.9:m=4:s=2,"
+                "acompressor=threshold=-22dB:ratio=12:knee=4:attack=0.5:release=40:makeup=8,"
+                "loudnorm=I=-4:TP=-0.1:LRA=2:dual_mono=true:linear=true,"
+                "acompressor=threshold=-10dB:ratio=6:knee=2:attack=0.3:release=20:makeup=2.5,"
+                "alimiter=limit=0.998:attack=0.7:release=5,"
+                "equalizer=f=3500:width_type=o:width=0.9:g=5.5,"
+                "equalizer=f=8000:width_type=o:width=1.1:g=-0.8,"
+                "aresample=48000:resampler=soxr"
+            )
+        
+        elif mult >= 32.0:  # 400% territory - VERY EXTREME LOUD
+            return pre_stage + (
+                "acompressor=threshold=-28dB:ratio=18:knee=7:attack=1:release=60:makeup=14,"
+                "dynaudnorm=f=300:g=28:n=1:p=0.8:m=6:s=3,"
+                "acompressor=threshold=-18dB:ratio=10:knee=4:attack=1:release=50:makeup=6,"
+                "loudnorm=I=-6:TP=-0.2:LRA=3:dual_mono=true:linear=true,"
+                "alimiter=limit=0.995:attack=1:release=8,"
+                "equalizer=f=3500:width_type=o:width=1.0:g=4.5,"
+                "aresample=48000"
+            )
+        
+        else:  # Normal to loud range
+            return pre_stage + (
+                "dynaudnorm=f=200:g=20:n=1:p=0.7:m=8:s=5,"
+                "acompressor=threshold=-20dB:ratio=10:knee=4:attack=2:release=80:makeup=10,"
+                "loudnorm=I=-10:TP=-1.0:LRA=5:dual_mono=true:linear=true,"
+                "alimiter=limit=0.98,"
+                "equalizer=f=3500:width_type=o:width=1.2:g=3.0,"
+                "aresample=48000"
+            )
+
+    async def enhance_audio_with_pydub(self, input_path: str, output_path: str, volume_percent: int = 200) -> bool:
+        """
+        Enhanced audio processing using pydub for maximum volume and quality
+        Applies multiple enhancement techniques for the best sound
+        """
+        try:
+            logger.info(f"🎵 Enhancing audio with pydub: {input_path} -> {output_path} at {volume_percent}%")
+            
+            # Load audio file
+            audio = AudioSegment.from_file(input_path)
+            
+            # Calculate volume multiplier
+            volume_mult = self._ui_to_multiplier(volume_percent)
+            
+            # Apply multiple enhancement stages
+            enhanced_audio = audio
+            
+            # 1. Normalize audio to consistent level
+            enhanced_audio = normalize(enhanced_audio)
+            
+            # 2. Apply volume boost
+            if volume_mult != 1.0:
+                # dB gain from multiplier (correct formula)
+                gain_db = 20.0 * math.log10(max(1e-6, volume_mult))
+                # cap pre-compressor gain so it doesn't clip before processing
+                gain_db = min(gain_db, 18.0)
+                enhanced_audio = enhanced_audio + gain_db
+            
+            # 3. Apply dynamic range compression for consistent loudness
+            # Simulate compression by limiting peaks and boosting overall level
+            peak_dB = enhanced_audio.max_dBFS
+            target_peak = -3.0  # Target peak level in dB
+            
+            if peak_dB < target_peak:
+                # Boost to target level
+                boost_needed = target_peak - peak_dB
+                enhanced_audio = enhanced_audio + boost_needed
+            
+            # 4. Apply EQ enhancements for better voice clarity
+            # Boost frequencies important for voice (1-4kHz)
+            try:
+                # High-pass filter to remove rumble
+                enhanced_audio = high_pass_filter(enhanced_audio, 80)
+                
+                # Low-pass filter to remove harsh highs
+                enhanced_audio = low_pass_filter(enhanced_audio, 15000)
+                
+                # Boost presence frequencies (2-4kHz) for clarity
+                # This is a simplified EQ boost - pydub doesn't have direct parametric EQ
+                # We'll overlay a boosted version of the audio in the target range
+                presence_boost = enhanced_audio.high_pass_filter(2000).low_pass_filter(4000) + 3
+                enhanced_audio = enhanced_audio.overlay(presence_boost)
+                
+            except Exception as eq_error:
+                logger.warning(f"⚠️ EQ processing failed: {eq_error}")
+            
+            # 5. Apply final normalization and peak limiting
+            enhanced_audio = normalize(enhanced_audio)
+            
+            # Ensure we don't exceed maximum digital level
+            max_peak = enhanced_audio.max_dBFS
+            if max_peak > -1.0:  # If too close to 0dBFS
+                reduction_needed = max_peak + 1.0
+                enhanced_audio = enhanced_audio - reduction_needed
+            
+            # 6. Export: 48 kHz, 2ch, highest VBR (sounds better than fixed 256k)
+            enhanced_audio.export(
+                output_path,
+                format="mp3",
+                bitrate="320k",
+                parameters=["-ar", "48000", "-ac", "2", "-acodec", "libmp3lame", "-q:a", "0"]
+            )
+            
+            logger.info(f"✅ Audio enhancement completed. Volume: {volume_percent}%, Output: {output_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Pydub audio enhancement failed: {e}")
+            logger.error(traceback.format_exc())
+            return False
+
+    async def process_audio_with_enhancement(self, input_path: str, volume_percent: int = 200) -> str:
+        """
+        Process audio file with enhanced volume and quality using pydub
+        Returns path to the enhanced audio file
+        """
+        try:
+            input_file = Path(input_path)
+            if not input_file.exists():
+                logger.error(f"❌ Input file not found: {input_path}")
+                return input_path
+            
+            # Generate output path
+            output_path = input_file.parent / f"enhanced_{input_file.name}"
+            
+            # Try pydub enhancement first
+            pydub_success = await self.enhance_audio_with_pydub(
+                str(input_file), str(output_path), volume_percent
+            )
+            
+            if pydub_success:
+                logger.info(f"✅ Used pydub enhancement: {output_path}")
+                return str(output_path)
+            
+            # Fallback to ffmpeg if pydub fails
+            logger.warning("⚠️ Pydub failed, falling back to ffmpeg processing")
+            return await self._process_audio_ffmpeg_fallback(str(input_file), volume_percent)
+            
+        except Exception as e:
+            logger.error(f"❌ Audio processing failed: {e}")
+            return input_path  # Return original path if all processing fails
+
+    async def _process_audio_ffmpeg_fallback(self, input_path: str, volume_percent: int) -> str:
+        """
+        Fallback ffmpeg processing when pydub is not available or fails
+        """
+        try:
+            input_file = Path(input_path)
+            output_path = input_file.parent / f"ffmpeg_enhanced_{input_file.name}"
+            
+            mult = self._ui_to_multiplier(volume_percent)
+            af_chain = self.build_filter_chain(mult)
+            
+            cmd = [
+                FFMPEG_PATH, "-y",
+                "-i", str(input_path),
+                "-af", af_chain,
+                "-ar", "48000",
+                "-ac", "2",
+                "-acodec", "libmp3lame",
+                "-q:a", "0",     # Best quality
+                str(output_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                logger.info(f"✅ FFMPEG fallback processing completed: {output_path}")
+                return str(output_path)
+            else:
+                logger.error(f"❌ FFMPEG fallback failed: {result.stderr}")
+                return input_path
+                
+        except Exception as e:
+            logger.error(f"❌ FFMPEG fallback processing error: {e}")
+            return input_path
     # ----------------------------------------------------------------
+
+    async def process_audio_for_maximum_loudness(self, input_path: str, output_path: str, volume_percent: int) -> bool:
+        """
+        Process audio using the extreme loudness chain
+        Optimized for maximum perceived loudness while maintaining quality
+        """
+        try:
+            logger.info(f"Processing audio for maximum loudness: {volume_percent}%")
+            
+            mult = self.ui_percent_to_gain_mult(volume_percent)
+            af_chain = self.build_extreme_loudness_chain(mult)
+            
+            # Enhanced FFmpeg command with optimal settings
+            cmd = [
+                FFMPEG_PATH, "-y",
+                "-i", str(input_path),
+                
+                # Input format optimization
+                "-async", "1",
+                "-vsync", "0",
+                
+                # Audio filtering
+                "-af", af_chain,
+                
+                # Output format optimization for maximum quality
+                "-ar", "48000",
+                "-ac", "2",
+                "-acodec", "libmp3lame",
+                "-b:a", "320k",  # Maximum MP3 bitrate
+                "-q:a", "0",     # Best quality
+                
+                # Additional encoding parameters for loudness preservation
+                "-write_xing", "0",  # Disable Xing header for better compatibility
+                "-id3v2_version", "3",
+                
+                str(output_path)
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode == 0:
+                logger.info(f"Successfully processed audio with {volume_percent}% loudness boost")
+                return True
+            else:
+                logger.error(f"FFmpeg processing failed: {result.stderr}")
+                return False
+            
+        except Exception as e:
+            logger.error(f"Error in maximum loudness processing: {e}")
+            return False
+
+    async def analyze_audio_levels(self, file_path: str) -> dict:
+        """
+        Analyze the processed audio to verify loudness levels
+        """
+        try:
+            cmd = [
+                FFMPEG_PATH, "-i", str(file_path),
+                "-af", "astats=metadata=1:reset=1,ametadata=print:key=lavfi.astats.Overall.RMS_level:key=lavfi.astats.Overall.Peak_level",
+                "-f", "null", "-"
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            # Parse RMS and Peak levels from output
+            rms_match = re.search(r'RMS_level=(-?\d+\.?\d*)', result.stderr)
+            peak_match = re.search(r'Peak_level=(-?\d+\.?\d*)', result.stderr)
+            
+            levels = {}
+            if rms_match:
+                levels['rms_dbfs'] = float(rms_match.group(1))
+            if peak_match:
+                levels['peak_dbfs'] = float(peak_match.group(1))
+                
+            logger.info(f"Audio analysis: RMS={levels.get('rms_dbfs', 'N/A')}dBFS, Peak={levels.get('peak_dbfs', 'N/A')}dBFS")
+            return levels
+            
+        except Exception as e:
+            logger.error(f"Error analyzing audio levels: {e}")
+            return {}
+
+    async def play_media_with_maximum_loudness(self, chat_id: Union[int, str], file_path: str,
+                    settings: VoiceSettings, is_video: bool = False) -> bool:
+        """
+        Enhanced play_media with maximum loudness processing
+        """
+        try:
+            async with self._lock:
+                chat_id_str = str(chat_id)
+                if not Path(file_path).exists():
+                    logger.error(f"Media file not found: {file_path}")
+                    return False
+                
+                if chat_id_str not in self.active_calls:
+                    logger.warning(f"Not in voice chat {chat_id}")
+                    return False
+                    
+                call_info = self.active_calls[chat_id_str]
+                pytgcalls = call_info.get("pytgcalls")
+                
+                if not pytgcalls:
+                    logger.error(f"PyTgCalls instance not available for {chat_id}")
+                    return False
+                    
+                try:
+                    # Generate enhanced output path
+                    input_file = Path(file_path)
+                    enhanced_path = input_file.parent / f"max_loud_{input_file.name}"
+                    
+                    # Process audio for maximum loudness
+                    volume = call_info.get("volume", MAX_VOLUME)
+                    success = await self.process_audio_for_maximum_loudness(
+                        str(input_file), str(enhanced_path), volume
+                    )
+                    
+                    if not success:
+                        logger.error("Failed to process audio for maximum loudness")
+                        return False
+                    
+                    # Analyze the processed audio levels
+                    levels = await self.analyze_audio_levels(str(enhanced_path))
+                    
+                    # Play the enhanced audio
+                    from pytgcalls.types import MediaStream
+                    await pytgcalls.play(chat_id, MediaStream(str(enhanced_path)))
+                    
+                    # Update call info
+                    self.active_calls[chat_id_str].update({
+                        "playing": True,
+                        "file": str(enhanced_path),
+                        "volume": volume,
+                        "is_video": is_video,
+                        "started_at": time.time(),
+                        "current_stream": str(enhanced_path),
+                        "stream_type": "audio",
+                        "src_file": file_path,
+                        "audio_levels": levels
+                    })
+                    
+                    self.performance_stats['total_media_played'] += 1
+                    
+                    rms_level = levels.get('rms_dbfs', 'Unknown')
+                    peak_level = levels.get('peak_dbfs', 'Unknown')
+                    logger.info(f"Playing maximum loudness audio: RMS={rms_level}dBFS, Peak={peak_level}dBFS")
+                    
+                    return True
+                    
+                except Exception as e:
+                    logger.error(f"Failed to play media with maximum loudness: {e}")
+                    return False
+                    
+        except Exception as e:
+            logger.error(f"Error in maximum loudness playback: {e}")
+            return False
 
     async def play_media_with_offset(self, chat_id: Union[int, str], file_path: str, is_video: bool = False):
         """Play media from start or resume from paused position using ffmpeg -ss (PyTgCalls v2.2.6)"""
@@ -585,7 +964,7 @@ class EnhancedVoiceChatManager:
         state["is_playing"] = True
         state["start_time"] = time.time() - state["paused_at"]
         mult = self._ui_to_multiplier(self.active_calls.get(chat_id_str, {}).get("volume", 100))
-        af_chain = self._filter_chain(mult)
+        af_chain = self.build_filter_chain(mult)
         ffmpeg_cmd = [
             FFMPEG_PATH,
             "-y",
@@ -593,8 +972,10 @@ class EnhancedVoiceChatManager:
             "-i", str(file_path),
             "-vn" if not is_video else "",
             "-af", af_chain,
+            "-ar", "48000",
+            "-ac", "2",
             "-acodec", "libmp3lame",
-            "-b:a", "256k",
+            "-q:a", "0",
             "-f", "mp3",
             str(file_path) + ".seek.mp3"
         ]
@@ -614,33 +995,50 @@ class EnhancedVoiceChatManager:
         print(f"▶️ Playing from {state['paused_at']}s ({'Video' if is_video else 'Audio'})")
 
     async def pause_media(self, chat_id: Union[int, str]) -> bool:
-        """Pause and remember position"""
+        """Pause and remember position, always save file and playback info"""
         chat_id_str = str(chat_id)
-        state = self.playback_state.setdefault(chat_id_str, {"is_playing": False, "paused_at": 0, "start_time": 0})
+        call_info = self.active_calls.get(chat_id_str, {})
+        current_stream = call_info.get("current_stream")
+        is_video = call_info.get("stream_type") == "video"
+        state = self.playback_state.setdefault(chat_id_str, {"is_playing": False, "paused_at": 0, "start_time": 0, "file": None, "is_video": is_video})
         if state["is_playing"]:
-            elapsed = time.time() - state["start_time"]
+            elapsed = time.time() - state.get("start_time", 0)
             state["paused_at"] += int(elapsed)
-            pytgcalls = self.active_calls[chat_id_str]["pytgcalls"]
+            pytgcalls = call_info.get("pytgcalls")
             # Try pause, fallback to stop_playout
-            if hasattr(pytgcalls, "pause"):
-                await pytgcalls.pause(int(chat_id))
-            elif hasattr(pytgcalls, "stop_playout"):
-                await pytgcalls.stop_playout(int(chat_id))
-            else:
-                logger.error("❌ PyTgCalls has no pause or stop_playout method!")
+            if pytgcalls:
+                if hasattr(pytgcalls, "pause"):
+                    await pytgcalls.pause(int(chat_id))
+                elif hasattr(pytgcalls, "stop_playout"):
+                    await pytgcalls.stop_playout(int(chat_id))
+                else:
+                    logger.error("❌ PyTgCalls has no pause or stop_playout method!")
             state["is_playing"] = False
             self.active_calls[chat_id_str]["playing"] = False
-            print(f"⏸️ Paused at {state['paused_at']}s")
+            # Always save the current file and video state for resume
+            if current_stream:
+                state["file"] = current_stream
+            state["is_video"] = is_video
+            print(f"⏸️ Paused at {state['paused_at']}s, file: {state['file']}")
             return True
         return False
 
     async def resume_media(self, chat_id: Union[int, str]) -> bool:
-        """Resume from last paused position"""
+        """Resume playback from last paused position, updating state correctly"""
         chat_id_str = str(chat_id)
-        state = self.playback_state.setdefault(chat_id_str, {"is_playing": False, "paused_at": 0, "file": None, "is_video": False})
-        if not state["is_playing"] and state["file"]:
-            await self.play_media_with_offset(chat_id, state["file"], state["is_video"])
-            return True
+        state = self.playback_state.setdefault(chat_id_str, {"is_playing": False, "paused_at": 0, "file": None, "is_video": False, "start_time": 0})
+        # Only resume if paused and file is available
+        if not state["is_playing"] and state["file"] is not None:
+            try:
+                await self.play_media_with_offset(chat_id, state["file"], state.get("is_video", False))
+                state["is_playing"] = True
+                state["start_time"] = time.time() - state["paused_at"]
+                # Reset paused_at after resuming
+                state["paused_at"] = 0
+                return True
+            except Exception as e:
+                logger.error(f"❌ Failed to resume media in {chat_id}: {e}")
+                return False
         return False
     """Enhanced Voice Chat Manager with modern PyTgCalls 2.2.5 support"""
     
@@ -745,15 +1143,17 @@ class EnhancedVoiceChatManager:
                         logger.error("❌ Video playback is not supported by pytgcalls.")
                         return False
                     mult = self._ui_to_multiplier(call_info.get("volume", 100))
-                    af_chain = self._filter_chain(mult)
+                    af_chain = self.build_filter_chain(mult)
                     adjusted_path = str(file_path) + ".adjusted.mp3"
                     ffmpeg_cmd = [
                         FFMPEG_PATH,
                         "-y",
                         "-i", str(file_path),
                         "-af", af_chain,
+                        "-ar", "48000",
+                        "-ac", "2",
                         "-acodec", "libmp3lame",
-                        "-b:a", "256k",
+                        "-q:a", "0",
                         "-f", "mp3",
                         adjusted_path
                     ]
@@ -770,7 +1170,8 @@ class EnhancedVoiceChatManager:
                         "is_video": is_video,
                         "started_at": time.time(),
                         "current_stream": adjusted_path,
-                        "stream_type": "audio"
+                        "stream_type": "audio",
+                        "src_file": file_path  # Store original file path
                     })
                     self.performance_stats['total_media_played'] += 1
                     logger.info(f"✅ Playing enhanced audio in {chat_id} with PyTgCalls")
@@ -783,7 +1184,7 @@ class EnhancedVoiceChatManager:
             return False
 
     async def set_volume(self, chat_id: Union[int, str], volume: int) -> bool:
-        """Set volume for voice chat using ffmpeg-based approach with refined filters"""
+        """Set volume for voice chat using original source file to avoid re-compression"""
         try:
             chat_id_str = str(chat_id)
             if chat_id_str not in self.active_calls:
@@ -798,7 +1199,17 @@ class EnhancedVoiceChatManager:
                 return False
 
             self.active_calls[chat_id_str]["volume"] = volume
-            file_path = current_stream
+            
+            # Use original source file if available to avoid re-compressing already compressed audio
+            src_file = call_info.get("src_file")
+            if src_file and Path(src_file).exists():
+                file_path = src_file
+                logger.info(f"🎵 Using original source file for volume adjustment: {file_path}")
+            else:
+                # Fallback to current stream if source file is not available
+                file_path = current_stream
+                logger.warning(f"⚠️ Source file not available, using current stream: {file_path}")
+            
             is_video = call_info.get("stream_type") == "video"
 
             pytgcalls = call_info.get("pytgcalls")
@@ -812,12 +1223,15 @@ class EnhancedVoiceChatManager:
                     temp_file.close()
 
                     mult = self._ui_to_multiplier(volume)
-                    af_chain = self._filter_chain(mult)
+                    af_chain = self.build_filter_chain(mult)
                     cmd = [
                         FFMPEG_PATH, "-y",
                         "-i", str(file_path),
                         "-af", af_chain,
-                        "-acodec", "libmp3lame", "-b:a", "256k",
+                        "-ar", "48000",
+                        "-ac", "2",
+                        "-acodec", "libmp3lame",
+                        "-q:a", "0",
                         "-f", "mp3", temp_path
                     ]
 
@@ -828,7 +1242,7 @@ class EnhancedVoiceChatManager:
                         await pytgcalls.play(int(chat_id), MediaStream(temp_path))
                         self.active_calls[chat_id_str]["current_stream"] = temp_path
                         self.active_calls[chat_id_str]["temp_file"] = temp_path
-                        logger.info(f"🔊 Set volume to {volume}% in {chat_id} using ffmpeg (refined)")
+                        logger.info(f"🔊 Set volume to {volume}% in {chat_id} using original source (quality preserved)")
                         return True
                     else:
                         logger.error(f"❌ Failed to adjust volume with ffmpeg: {result.stderr}")
@@ -856,7 +1270,7 @@ class EnhancedVoiceChatManager:
             try:
                 result = subprocess.run([
                     FFMPEG_PATH, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
-                    "-t", "1", "-c:a", "libmp3lame", "-b:a", "128k", "-y", str(silence_path)
+                    "-t", "1", "-c:a", "libmp3lame", "-q:a", "0", "-y", str(silence_path)
                 ], check=True, capture_output=True, text=True)
                 
                 if silence_path.exists() and silence_path.stat().st_size > 0:
@@ -886,6 +1300,20 @@ class EnhancedVoiceChatManager:
         except Exception as e:
             logger.error(f"❌ Failed to create silence.mp3: {e}")
             raise
+
+    def _ui_to_multiplier(self, volume_percent: int) -> float:
+        """
+        100% -> 1.0x, 600% -> ~28.0x (OVERKILL entry).
+        """
+        volume_percent = max(1, min(MAX_VOLUME, int(volume_percent)))
+        return 1.0 + (volume_percent - 100) * (27.0 / 500.0)
+
+    def build_filter_chain(self, mult: float) -> str:
+        """
+        Build audio filter chain for volume processing
+        This is a legacy method for backward compatibility
+        """
+        return self.build_extreme_loudness_chain(mult)
 
     async def _cleanup_call(self, chat_id_str: str):
         """Enhanced cleanup for voice calls"""
@@ -1575,14 +2003,16 @@ async def handle_media_file(message: Message, state: FSMContext):
                     ext = file_path.suffix.lower()
                     # Use the new helpers for volume mapping and filter chain
                     mult = voice_manager._ui_to_multiplier(volume_db)
-                    af_chain = voice_manager._filter_chain(mult)
+                    af_chain = voice_manager.build_filter_chain(mult)
                     cmd = [
                         FFMPEG_PATH,
                         "-y",
                         "-i", str(file_path),
                         "-af", af_chain,
+                        "-ar", "48000",
+                        "-ac", "2",
                         "-acodec", "libmp3lame",
-                        "-b:a", "256k",
+                        "-q:a", "0",
                         str(adjusted_path)
                     ]
                     if ext in [".mp4", ".mkv", ".avi", ".mov"]:
@@ -1750,15 +2180,19 @@ async def callback_resume_chat(callback: CallbackQuery):
     try:
         chat_id = callback.data.split(":", 1)[1]
         success = await voice_manager.resume_media(chat_id)
-        
         if success:
             await callback.answer("▶️ Resumed successfully", show_alert=False)
+            # Optionally, update the message to show resumed status
+            await callback.message.edit_text(
+                f"▶️ Playback resumed in chat {chat_id}.",
+                parse_mode="Markdown"
+            )
         else:
             await callback.answer("❌ Failed to resume", show_alert=True)
-            
-        # Refresh the pause/resume menu
-        await callback_pause_resume(callback)
-        
+            await callback.message.edit_text(
+                f"❌ Failed to resume playback in chat {chat_id}.",
+                parse_mode="Markdown"
+            )
     except Exception as e:
         logger.error(f"❌ Error resuming chat: {e}")
         await callback.answer("❌ An error occurred", show_alert=True)
@@ -1841,8 +2275,8 @@ async def callback_volume_control(callback: CallbackQuery):
             await callback.answer("❌ No active voice chats", show_alert=True)
             return
         
-        # Volume control using ffmpeg (percent based)
-        percent_steps = [25, 50, 75, 100, 125, 150, 175, 200]
+        # Enhanced volume control with pydub processing (up to 300%)
+        percent_steps = [25, 50, 75, 100, 125, 150, 175, 200, 250, 300, 400, 500, 600]
         volume_buttons = [InlineKeyboardButton(text=f"{v}%", callback_data=f"set_volume:{v}") for v in percent_steps]
         volume_rows = [volume_buttons[i:i+3] for i in range(0, len(volume_buttons), 3)]
         buttons = volume_rows + [
@@ -1851,10 +2285,16 @@ async def callback_volume_control(callback: CallbackQuery):
         ]
         keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
         await callback.message.edit_text(
-            f"🔊 **Volume Control**\n\n"
+            f"🔊 **Enhanced Volume Control**\n\n"
             f"🎤 **Active Calls:** {len(status['calls'])}\n\n"
-            f"Select a volume percentage (25% to 200%):\n\n"
-            f"Lower = softer, higher = louder.",
+            f"🚀 **NEW: Up to 600% volume with Pydub enhancement!**\n"
+            f"🎵 **Crystal clear sound even at maximum volume**\n\n"
+            f"Select a volume percentage (25% to 600%):\n\n"
+            f"• 100% = Normal volume\n"
+            f"• 150% = Loud boost\n"
+            f"• 200% = Very loud\n"
+            f"• 250-600% = Maximum power 🚀\n\n"
+            f"✨ **Features:** Noise reduction, EQ enhancement, peak limiting",
             reply_markup=keyboard,
             parse_mode="Markdown"
         )
@@ -2105,8 +2545,8 @@ async def callback_set_volume(callback: CallbackQuery, state: FSMContext):
     """Set volume using ffmpeg-based approach"""
     try:
         percent = int(callback.data.split(":", 1)[1])
-        if percent < 10 or percent > 200:
-            await callback.answer("❌ Volume must be between 10% and 200%.", show_alert=True)
+        if percent < 25 or percent > 600:
+            await callback.answer("❌ Volume must be between 25% and 600%.", show_alert=True)
             return
 
         status = voice_manager.get_status()

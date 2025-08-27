@@ -23,7 +23,7 @@ def create_silence_with_ffmpeg():
     try:
         cmd = [
             "ffmpeg", "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", 
-            "-t", "1", "-c:a", "libmp3lame", "-b:a", "128k", 
+            "-t", "1", "-ar", "48000", "-ac", "2", "-acodec", "libmp3lame", "-q:a", "0", 
             "-y", "silence.mp3"  # -y to overwrite if exists
         ]
         
@@ -110,8 +110,8 @@ def create_wav_silence():
         if check_ffmpeg():
             try:
                 subprocess.run([
-                    "ffmpeg", "-i", "silence.wav", "-codec:a", "libmp3lame", 
-                    "-b:a", "128k", "-y", "silence.mp3"
+                    "ffmpeg", "-i", "silence.wav", "-ar", "48000", "-ac", "2", 
+                    "-acodec", "libmp3lame", "-q:a", "0", "-y", "silence.mp3"
                 ], capture_output=True, check=True)
                 os.remove("silence.wav")  # Remove WAV file
                 print("✅ Converted to silence.mp3")
