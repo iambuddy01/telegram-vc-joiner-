@@ -1,0 +1,71 @@
+{
+  "name": "Telegram Voice Chat Bot",
+  "description": "Advanced Telegram voice chat bot with PyTgCalls 2.2.5, enhanced audio processing, and 600% volume boost",
+  "repository": "https://github.com/anoop14613742/telegram-vc-joiner-",
+  "logo": "https://avatars.githubusercontent.com/u/8109850?s=200&v=4",
+  "keywords": [
+    "telegram",
+    "voice-chat",
+    "pytgcalls",
+    "audio",
+    "streaming",
+    "bot"
+  ],
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    },
+    {
+      "url": "heroku-community/apt"
+    }
+  ],
+  "env": {
+    "API_ID": {
+      "description": "Your Telegram API ID (get from https://my.telegram.org)",
+      "required": true
+    },
+    "API_HASH": {
+      "description": "Your Telegram API Hash (get from https://my.telegram.org)",
+      "required": true
+    },
+    "BOT_TOKEN": {
+      "description": "Your Telegram Bot Token (get from @BotFather)",
+      "required": true
+    },
+    "OWNER_IDS": {
+      "description": "Comma-separated list of authorized Telegram User IDs (get from @userinfobot)",
+      "required": true
+    },
+    "MAX_VOLUME": {
+      "description": "Maximum volume level (1-600%)",
+      "value": "600",
+      "required": false
+    },
+    "JOIN_DELAY": {
+      "description": "Delay between joins in seconds",
+      "value": "2",
+      "required": false
+    },
+    "LEAVE_DELAY": {
+      "description": "Delay between leaves in seconds",
+      "value": "1",
+      "required": false
+    },
+    "MAX_ACCOUNTS": {
+      "description": "Maximum number of accounts to manage",
+      "value": "50",
+      "required": false
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "eco"
+    }
+  },
+  "addons": [],
+  "scripts": {
+    "postdeploy": "echo 'Deployment successful! Start your bot by messaging it on Telegram.'"
+  }
+}

@@ -1,13 +1,41 @@
-# Telegram VC Joiner Bot
+# Telegram Voice Chat Bot
 
+[![Deploy to Heroku](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy?template=https://github.com/anoop14613742/telegram-vc-joiner-)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
-[![Code of Conduct](https://img.shields.io/badge/code%20of-conduct-ff69b4.svg?style=flat)](CODE_OF_CONDUCT.md)
 
-A Python bot that automatically joins Telegram voice chats and plays audio content. This project is **open for contributions** and welcomes developers of all skill levels!
+Advanced Telegram voice chat bot with **PyTgCalls 2.2.5**, enhanced audio processing, and **600% volume boost**. Features auto-installing dependencies, multiple account management, and Heroku-ready deployment.
 
-> 🚀 **Looking for contributors!** Whether you're a beginner or experienced developer, there are many ways to contribute to this project.
+## 🚀 Quick Deploy to Heroku
+
+**One-click deployment** - Click the button above to instantly deploy to Heroku!
+
+Alternatively, follow our [detailed Heroku deployment guide](README_HEROKU.md) for manual setup.
+
+## ✨ Features
+
+### 🎵 Audio & Voice Chat
+- **Enhanced audio processing** with up to 600% volume boost
+- **PyTgCalls 2.2.5** integration with modern GroupCallFactory API
+- **Auto-queue management** with playlist support
+- **Pause/Resume functionality** with position tracking
+- **Multiple audio formats** support (MP3, WAV, OGG, M4A)
+- **Real-time volume control** during playback
+
+### 👥 Account Management
+- **Multiple Telegram accounts** support
+- **Secure session storage** with encryption options
+- **Auto-reconnection** on disconnects
+- **Performance monitoring** and statistics
+
+### �️ Technical Excellence
+- **Auto-installing dependencies** on first run
+- **Modern async/await** patterns throughout
+- **Comprehensive error handling** and logging
+- **JSON performance optimization** with orjson
+- **Memory-efficient** operations
+- **Thread-safe** voice chat operations
 
 ## 🎯 Special Invitation to Telegram Experts
 
@@ -23,91 +51,73 @@ A Python bot that automatically joins Telegram voice chats and plays audio conte
 - **Network Protocol Experts** - Improve connection stability and error handling
 - **Security Specialists** - Enhance authentication and data protection
 
-### 🌟 What We Offer Expert Contributors
+## 📋 Requirements
 
-- **Technical Leadership Opportunities** - Lead feature development and architecture decisions
-- **Direct Collaboration** - Work closely with maintainers on roadmap planning
-- **Recognition & Credits** - Featured prominently in project documentation and releases
-- **Learning Exchange** - Share knowledge with the community and learn from others
-- **Open Source Impact** - Help build tools used by the Telegram developer community
+- **Python 3.11+** (recommended for Heroku)
+- **Telegram API credentials** (API ID, API Hash)
+- **Bot Token** from @BotFather
+- **FFmpeg** (automatically installed on Heroku)
 
-### 📞 How to Get Involved as an Expert
+## 🚀 Quick Start
 
-1. **Review our codebase** and identify areas where your expertise can make an impact
-2. **Open a discussion** about your ideas for improvements or new features
-3. **Submit a detailed proposal** for significant changes or architectural improvements
-4. **Mentor other contributors** and help review pull requests in your area of expertise
+### Option 1: Deploy to Heroku (Recommended)
 
-**Have experience with similar projects?** We'd love to hear about your background with:
-- Telegram userbot development
-- Voice chat automation
-- Real-time audio streaming
-- Telegram MTProto protocol
-- Large-scale bot deployments
+1. **Click the "Deploy to Heroku" button** above
+2. **Fill in the environment variables**:
+   - `API_ID` - Get from [my.telegram.org](https://my.telegram.org)
+   - `API_HASH` - Get from [my.telegram.org](https://my.telegram.org)
+   - `BOT_TOKEN` - Get from [@BotFather](https://t.me/BotFather)
+   - `OWNER_IDS` - Get your user ID from [@userinfobot](https://t.me/userinfobot)
+3. **Deploy** and your bot will be live!
 
-*If you're an expert in any of these areas, please reach out! We're excited to collaborate with experienced developers who can help take this project to the next level.*
+### Option 2: Local Development
 
-## Features
-
-- Automatically joins Telegram voice chats
-- Plays audio files in voice chats
-- Imports and manages chat invitations
-- Creates silence audio for testing
-- Comprehensive logging system
-- Media processing capabilities
-
-## Files Structure
-
-- `main.py` - Main bot application
-- `import_invite_chat.py` - Handles chat invitation imports
-- `create_silence.py` - Generates silence audio files
-- `silence.mp3` - Default silence audio file
-- `requirements.txt` - Python dependencies
-- `.env` - Environment configuration (not included in repo)
-
-## Setup
-
-1. Clone the repository:
 ```bash
+# Clone the repository
 git clone https://github.com/anoop14613742/telegram-vc-joiner-.git
 cd telegram-vc-joiner-
-```
 
-2. Install dependencies:
-```bash
+# Install dependencies (auto-installs on first run)
 pip install -r requirements.txt
-```
 
-3. Create a `.env` file with your configuration:
-```
-# Add your environment variables here
-```
+# Copy environment template
+cp .env.example .env
 
-4. Run the bot:
-```bash
+# Edit .env with your credentials
+# Get API_ID & API_HASH from https://my.telegram.org
+# Get BOT_TOKEN from @BotFather
+# Get OWNER_IDS from @userinfobot
+
+# Run the bot
 python main.py
 ```
 
-## Requirements
+## 🎮 Usage
 
-- Python 3.7+
-- Telegram API credentials
-- Required Python packages (see requirements.txt)
+1. **Start the bot**: Send `/start` to your bot on Telegram
+2. **Add accounts**: Use "👥 Accounts" menu to add Telegram accounts
+3. **Join voice chats**: Use "🎤 Voice Chat" → "🎤 Join Voice Chat"
+4. **Play media**: Upload audio files and play with enhanced volume
+5. **Control playback**: Use pause/resume/stop controls
+6. **Adjust volume**: Real-time volume control up to 600%
 
-## Directories
+## 📁 Project Structure
 
-- `backups/` - Backup files
-- `cache/` - Temporary cache files
-- `logs/` - Application logs
-- `media/` - Media files
-- `media/processed/` - Processed media files
-
-## Usage
-
-1. Configure your Telegram API credentials in the `.env` file
-2. Run the main script to start the bot
-3. Use the import script to manage chat invitations
-4. The bot will automatically join and participate in voice chats
+```
+telegram-vc-joiner-/
+├── main.py                 # Main bot application
+├── requirements.txt        # Python dependencies
+├── Procfile               # Heroku process file
+├── runtime.txt            # Python version for Heroku
+├── Aptfile                # System dependencies for Heroku
+├── app.json               # Heroku app configuration
+├── .env.example           # Environment variables template
+├── README_HEROKU.md       # Detailed Heroku deployment guide
+├── logs/                  # Application logs
+├── media/                 # Uploaded media files
+├── cache/                 # Temporary cache
+└── backups/               # Session backups
+```
 
 ## Contributing
 
