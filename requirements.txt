@@ -1,7 +1,7 @@
-# Modern Voice Chat Bot - Auto-Installing Dependencies
-# Python 3.9+ required - All dependencies auto-install on first run
+# Telegram Voice Chat Bot - Heroku Deployment
+# Python 3.11+ required for Heroku
 
-# ===== CORE DEPENDENCIES =====
+# Core dependencies
 telethon==1.40.0
 py-tgcalls==2.2.5
 aiogram==3.15.0
@@ -9,29 +9,10 @@ aiofiles==24.1.0
 python-dotenv==1.0.1
 pydub==0.25.1
 
-# ===== PERFORMANCE DEPENDENCIES =====
+# Performance dependencies
 orjson==3.10.12
 cryptg==0.4.0
 psutil==6.1.0
 Pillow==10.4.0
 aiohttp[speedups]==3.10.10
 ffmpeg-python==0.2.0
-
-# ===== OPTIONAL ADVANCED DEPENDENCIES =====
-# aiosqlite==0.20.0
-# redis==5.2.0
-# pytest==8.3.4
-# pytest-asyncio==0.24.0
-
-# ===== SYSTEM REQUIREMENTS =====
-# FFmpeg must be installed on your system and available in PATH.
-
-# ===== INSTALLATION =====
-# pip install -r requirements.txt
-
-# ===== TROUBLESHOOTING =====
-# If installation fails, upgrade pip and install build tools as needed.
-
-# (Do not include any Python code or print statements in requirements.txt)
-
-pydub
