@@ -5,14 +5,13 @@ This starts both the web server (for PORT binding) and the Telegram bot
 """
 
 import os
+import sys
 import asyncio
 import logging
 from aiohttp import web
-from aiohttp.web_runner import GracefulExit
 
-# Import your main bot
-from main import dp, bot, load_users
-
+# Setup logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 async def health_check(request):
@@ -38,29 +37,34 @@ async def start_web_server():
     logger.info(f"🌐 Web server started on port {port}")
     return runner
 
-async def start_bot():
-    """Start the Telegram bot"""
+async def start_telegram_bot():
+    """Import and start the main bot"""
     try:
+        # Import the main bot components
+        from main import dp, bot, load_users
+        
         await load_users()
         logger.info("🤖 Starting Telegram bot...")
         await dp.start_polling(bot, skip_updates=True)
     except Exception as e:
         logger.error(f"❌ Bot error: {e}")
+        import traceback
+        traceback.print_exc()
 
 async def main():
     """Main function - starts both web server and bot"""
     logger.info("🚀 Starting Telegram VC Bot on Heroku...")
     
-    # Start web server (required for Heroku)
+    # Start web server first (required for Heroku)
     runner = await start_web_server()
     
-    # Start bot
-    bot_task = asyncio.create_task(start_bot())
+    # Start bot in background task
+    bot_task = asyncio.create_task(start_telegram_bot())
     
     try:
         # Keep both running
         await bot_task
-    except (KeyboardInterrupt, SystemExit, GracefulExit):
+    except (KeyboardInterrupt, SystemExit):
         logger.info("🛑 Shutting down...")
         await runner.cleanup()
     except Exception as e:
@@ -68,10 +72,10 @@ async def main():
         await runner.cleanup()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("🛑 Bot stopped by user")
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
+        sys.exit(1)
