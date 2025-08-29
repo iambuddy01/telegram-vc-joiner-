@@ -48,11 +48,11 @@ heroku create your-vc-bot-name
 heroku buildpacks:add heroku/python
 heroku buildpacks:add heroku-community/apt
 
-# Set environment variables
+# Set environment variables (IMPORTANT: No quotes around values)
 heroku config:set API_ID=your_api_id_here
 heroku config:set API_HASH=your_api_hash_here
 heroku config:set BOT_TOKEN=your_bot_token_here
-heroku config:set OWNER_IDS=your_user_id_here
+heroku config:set OWNER_IDS="your_user_id_here,another_user_id"
 
 # Deploy
 git push heroku main

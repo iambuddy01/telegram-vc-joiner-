@@ -2618,19 +2618,65 @@ async def callback_main(callback: CallbackQuery):
 
 if __name__ == "__main__":
     import asyncio
+    from aiohttp import web
+    from aiohttp.web_runner import GracefulExit
 
     async def main():
+        """Main function to start the bot"""
         await load_users()
         logger.info("🤖 Bot is starting...")
-        await dp.start_polling(bot)
+        
+        # Check if running on Heroku (has PORT environment variable)
+        port = os.getenv('PORT')
+        
+        if port:
+            # Heroku deployment - use webhook mode
+            logger.info("🌐 Starting in webhook mode for Heroku...")
+            
+            # Create aiohttp app for webhook
+            app = web.Application()
+            
+            # Add a simple health check endpoint
+            async def health_check(request):
+                return web.Response(text="Bot is running!", status=200)
+            
+            app.router.add_get('/', health_check)
+            app.router.add_get('/health', health_check)
+            
+            # Start the bot in polling mode alongside the web server
+            async def start_bot():
+                try:
+                    await dp.start_polling(bot, skip_updates=True)
+                except Exception as e:
+                    logger.error(f"❌ Bot polling error: {e}")
+            
+            # Run both the web server and bot concurrently
+            bot_task = asyncio.create_task(start_bot())
+            
+            # Start web server
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, '0.0.0.0', int(port))
+            await site.start()
+            
+            logger.info(f"🌐 Web server started on port {port}")
+            logger.info("🤖 Bot started in polling mode")
+            
+            # Keep both running
+            try:
+                await bot_task
+            except (KeyboardInterrupt, SystemExit, GracefulExit):
+                logger.info("🛑 Bot stopping...")
+                await runner.cleanup()
+        else:
+            # Local development - use polling only
+            logger.info("🖥️ Starting in polling mode for local development...")
+            await dp.start_polling(bot, skip_updates=True)
 
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("🛑 Bot stopped.")
-        asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        logger.info("🛑 Bot stopped.")
-        logger.info("🛑 Bot stopped.")
-        logger.info("🛑 Bot stopped.")
-        logger.info("🛑 Bot stopped.")
+    except Exception as e:
+        logger.error(f"❌ Critical error: {e}")
+        logger.error(traceback.format_exc())
