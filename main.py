@@ -431,6 +431,73 @@ except ValueError as e:
     logger.error(str(e))
     sys.exit(1)
 
+# FFmpeg setup for Heroku deployment
+def setup_ffmpeg_environment():
+    """Setup FFmpeg environment and check availability"""
+    global FFMPEG_PATH
+    
+    # Common FFmpeg installation paths on Heroku
+    heroku_paths = [
+        "/app/.apt/usr/bin/ffmpeg",
+        "/usr/bin/ffmpeg",
+        "/usr/local/bin/ffmpeg"
+    ]
+    
+    # Check if current FFMPEG_PATH works
+    try:
+        result = subprocess.run([FFMPEG_PATH, '-version'], 
+                               capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            logger.info(f"✅ FFmpeg found at: {FFMPEG_PATH}")
+            # Also check for ffprobe
+            ffprobe_path = FFMPEG_PATH.replace('ffmpeg', 'ffprobe')
+            try:
+                probe_result = subprocess.run([ffprobe_path, '-version'], 
+                                            capture_output=True, text=True, timeout=5)
+                if probe_result.returncode == 0:
+                    logger.info(f"✅ FFprobe found at: {ffprobe_path}")
+                    os.environ['FFPROBE_BINARY'] = ffprobe_path
+                else:
+                    logger.warning("⚠️ FFprobe not found with FFmpeg")
+            except:
+                logger.warning("⚠️ Could not verify FFprobe availability")
+            return
+    except:
+        pass
+    
+    # If default path doesn't work, try Heroku paths
+    for path in heroku_paths:
+        if os.path.exists(path) and os.access(path, os.X_OK):
+            try:
+                result = subprocess.run([path, '-version'], 
+                                       capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    FFMPEG_PATH = path
+                    logger.info(f"✅ FFmpeg found at Heroku path: {path}")
+                    
+                    # Update config and environment
+                    CONFIG['FFMPEG_PATH'] = path
+                    os.environ['FFMPEG_BINARY'] = path
+                    
+                    # Check for ffprobe in same directory
+                    ffprobe_path = path.replace('ffmpeg', 'ffprobe')
+                    if os.path.exists(ffprobe_path):
+                        logger.info(f"✅ FFprobe found at: {ffprobe_path}")
+                        os.environ['FFPROBE_BINARY'] = ffprobe_path
+                    return
+            except:
+                continue
+    
+    # If no FFmpeg found, log warning
+    logger.warning("⚠️ FFmpeg not found in expected locations. Voice features may not work.")
+    logger.warning("   Available paths checked:")
+    for path in heroku_paths:
+        exists = "✅" if os.path.exists(path) else "❌"
+        logger.warning(f"   {exists} {path}")
+
+# Setup FFmpeg environment
+setup_ffmpeg_environment()
+
 # Enhanced bot initialization with error handling
 try:
     bot = Bot(token=BOT_TOKEN)
