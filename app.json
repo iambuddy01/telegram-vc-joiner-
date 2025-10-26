@@ -11,7 +11,7 @@
     "streaming",
     "bot"
   ],
-  "stack": "heroku-24",
+  "stack": "heroku-22",
   "buildpacks": [
     {
       "url": "heroku/python"
